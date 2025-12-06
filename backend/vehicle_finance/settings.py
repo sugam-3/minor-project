@@ -132,7 +132,7 @@ SIMPLE_JWT = {
 # === CORS & CSRF ===
 # Prefer environment-driven CORS/CSRF settings (comma-separated lists)
 CORS_ALLOWED_ORIGINS = config(
-    "https://your-frontend.onrender.com",
+    "https://minor-project-1-c3qo.onrender.com",
     'CORS_ALLOWED_ORIGINS',
     default='',
     cast=lambda s: [u.strip() for u in s.split(',') if u.strip()]
