@@ -13,9 +13,13 @@ class User(AbstractUser):
     )
     
     user_type = models.CharField(max_length=20, choices=USER_TYPES, default='customer')
-    phone = models.CharField(max_length=15, blank=True)
-    address = models.TextField(blank=True)
-    citizenship_number = models.CharField(max_length=50, blank=True)
+    
+    # Make email and phone REQUIRED for notifications
+    email = models.EmailField(unique=True)  # Required and unique
+    phone = models.CharField(max_length=15)  # Required
+    
+    address = models.TextField(blank=True, null=True)
+    citizenship_number = models.CharField(max_length=50, blank=True, null=True)
     date_of_birth = models.DateField(null=True, blank=True)
     profile_picture = models.ImageField(upload_to='profiles/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -87,34 +91,28 @@ class LoanApplication(models.Model):
     customer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='loan_applications')
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='loan_applications')
     
-    # Loan Details
     loan_amount = models.DecimalField(max_digits=12, decimal_places=2)
     down_payment = models.DecimalField(max_digits=12, decimal_places=2)
     interest_rate = models.DecimalField(max_digits=5, decimal_places=2, default=12.0)
     tenure_months = models.IntegerField(validators=[MinValueValidator(6), MaxValueValidator(120)])
     monthly_emi = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
-    # Customer Financial Info
     monthly_income = models.DecimalField(max_digits=12, decimal_places=2)
     employment_type = models.CharField(max_length=50)
     employer_name = models.CharField(max_length=200, blank=True)
     
-    # Application Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_applications')
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_applications')
     
-    # AI Scoring
     credit_score = models.IntegerField(null=True, blank=True)
     fraud_risk_level = models.CharField(max_length=20, blank=True)
     ai_recommendation = models.TextField(blank=True)
     
-    # Remarks
     customer_remarks = models.TextField(blank=True)
     admin_remarks = models.TextField(blank=True)
     rejection_reason = models.TextField(blank=True)
     
-    # Timestamps
     submitted_at = models.DateTimeField(null=True, blank=True)
     verified_at = models.DateTimeField(null=True, blank=True)
     approved_at = models.DateTimeField(null=True, blank=True)
@@ -127,7 +125,6 @@ class LoanApplication(models.Model):
     
     def save(self, *args, **kwargs):
         if not self.application_number:
-            # Generate unique application number
             import random
             self.application_number = f"LA{random.randint(100000, 999999)}"
         super().save(*args, **kwargs)

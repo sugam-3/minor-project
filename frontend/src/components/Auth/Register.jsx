@@ -1,9 +1,53 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FaUser, FaEnvelope, FaLock, FaPhone, FaCar } from 'react-icons/fa';
+import { FaUser, FaEnvelope, FaLock, FaPhone, FaCar, FaArrowRight, FaExclamationCircle } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import authService from '../../services/auth';
-import { validateEmail, validatePassword } from '../../utils/validators';
+
+// Animated Background Component
+const AnimatedBackground = () => (
+  <>
+    <div className="fixed top-20 left-10 w-72 h-72 bg-white opacity-10 rounded-full blur-3xl animate-pulse pointer-events-none"></div>
+    <div
+      className="fixed bottom-20 right-10 w-96 h-96 bg-purple-300 opacity-10 rounded-full blur-3xl animate-pulse pointer-events-none"
+      style={{ animationDelay: '1s' }}
+    ></div>
+  </>
+);
+
+// Memoized InputField
+const InputField = React.memo(({ label, name, type, icon: Icon, placeholder, value, onChange, error }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">
+      {label} <span className="text-red-500">*</span>
+    </label>
+    <div className="relative">
+      {Icon && (
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+          <Icon className="text-gray-400" />
+        </div>
+      )}
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        className={`${Icon ? 'pl-12' : ''} w-full px-4 py-3 border-2 rounded-xl transition-all ${
+          error
+            ? 'border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-100'
+            : 'border-gray-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-100'
+        }`}
+        placeholder={placeholder}
+      />
+    </div>
+    {error && (
+      <div className="mt-2 flex items-start space-x-2 text-red-600">
+        <FaExclamationCircle className="mt-0.5 flex-shrink-0" />
+        <p className="text-sm">{error}</p>
+      </div>
+    )}
+  </div>
+));
 
 const Register = () => {
   const navigate = useNavigate();
@@ -18,207 +62,249 @@ const Register = () => {
     user_type: 'customer',
   });
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.username.trim()) newErrors.username = 'Username is required';
+    else if (formData.username.length < 3) newErrors.username = 'Username must be at least 3 characters';
+    else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) newErrors.username = 'Username can only contain letters, numbers, and underscores';
+
+    if (!formData.email.trim()) newErrors.email = 'Email is required for notifications';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Please enter a valid email address';
+
+    if (!formData.phone.trim()) newErrors.phone = 'Phone number is required for SMS notifications';
+    else if (!/^[0-9]{10}$/.test(formData.phone.replace(/\s/g, ''))) newErrors.phone = 'Please enter a valid 10-digit phone number';
+
+    if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
+    if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
+
+    if (!formData.password) newErrors.password = 'Password is required';
+    else if (formData.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
+
+    if (!formData.password2) newErrors.password2 = 'Please confirm your password';
+    else if (formData.password !== formData.password2) newErrors.password2 = 'Passwords do not match';
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Validation
-    if (!validateEmail(formData.email)) {
-      toast.error('Please enter a valid email');
-      return;
-    }
-
-    if (!validatePassword(formData.password)) {
-      toast.error('Password must be at least 8 characters');
-      return;
-    }
-
-    if (formData.password !== formData.password2) {
-      toast.error('Passwords do not match');
+    if (!validateForm()) {
+      toast.error('Please fix all errors before submitting');
       return;
     }
 
     setLoading(true);
-
     try {
-      await authService.register(formData);
-      toast.success('Registration successful!');
-      navigate('/customer/dashboard');
+      const { password2, ...registrationData } = formData;
+      await authService.register(registrationData);
+
+      toast.success('🎉 Registration successful! Please log in to continue.', {
+        duration: 4000,
+        style: {
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          fontWeight: 'bold',
+        },
+      });
+
+      // Redirect to login page
+      navigate('/login');
     } catch (error) {
-      const errorMsg = error.response?.data?.username?.[0] || 
-                      error.response?.data?.email?.[0] ||
-                      'Registration failed';
-      toast.error(errorMsg);
+      console.error('Registration error:', error.response?.data);
+      const errorData = error.response?.data;
+
+      if (errorData?.details) {
+        const newErrors = {};
+        Object.keys(errorData.details).forEach((key) => {
+          newErrors[key] = Array.isArray(errorData.details[key])
+            ? errorData.details[key][0]
+            : errorData.details[key];
+        });
+        setErrors(newErrors);
+
+        const firstError = Object.values(newErrors)[0];
+        toast.error(firstError);
+      } else if (errorData?.error) {
+        toast.error(errorData.error);
+      } else {
+        toast.error('Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full mb-4">
-            <FaCar className="text-3xl text-blue-600" />
+    <div className="relative min-h-screen flex items-center justify-center p-4 bg-gray-50">
+      <AnimatedBackground />
+
+      <div className="max-w-4xl w-full z-10">
+        <div className="glass rounded-3xl p-8 md:p-12 shadow-2xl">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-full mb-4">
+              <FaCar className="text-2xl text-white" />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Create Your Account</h1>
+            <p className="text-gray-600">Join Nepal's #1 vehicle financing platform</p>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Create Your Account
-          </h1>
-          <p className="text-blue-100">Start your vehicle financing journey</p>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  First Name *
-                </label>
-                <input
-                  type="text"
-                  name="first_name"
-                  value={formData.first_name}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Last Name *
-                </label>
-                <input
-                  type="text"
-                  name="last_name"
-                  value={formData.last_name}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+          {/* Important Notice */}
+          <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <FaExclamationCircle className="text-blue-500 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-blue-800">
+                <p className="font-semibold mb-1">Email & Phone Required</p>
+                <p>We need your email and phone number to send you important notifications about your loan applications, EMI reminders, and approval status.</p>
               </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Username *
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                  <FaUser className="text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Name Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <InputField
+                label="First Name"
+                name="first_name"
+                type="text"
+                placeholder="John"
+                value={formData.first_name}
+                onChange={handleChange}
+                error={errors.first_name}
+              />
+              <InputField
+                label="Last Name"
+                name="last_name"
+                type="text"
+                placeholder="Doe"
+                value={formData.last_name}
+                onChange={handleChange}
+                error={errors.last_name}
+              />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email *
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                  <FaEnvelope className="text-gray-400" />
-                </div>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
+            {/* Username */}
+            <InputField
+              label="Username"
+              name="username"
+              type="text"
+              icon={FaUser}
+              placeholder="johndoe123"
+              value={formData.username}
+              onChange={handleChange}
+              error={errors.username}
+            />
+
+            {/* Email */}
+            <InputField
+              label="Email Address"
+              name="email"
+              type="email"
+              icon={FaEnvelope}
+              placeholder="john@example.com"
+              value={formData.email}
+              onChange={handleChange}
+              error={errors.email}
+            />
+
+            {/* Phone */}
+            <InputField
+              label="Phone Number"
+              name="phone"
+              type="tel"
+              icon={FaPhone}
+              placeholder="98XXXXXXXX (10 digits)"
+              value={formData.phone}
+              onChange={handleChange}
+              error={errors.phone}
+            />
+
+            {/* Password Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <InputField
+                label="Password"
+                name="password"
+                type="password"
+                icon={FaLock}
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={handleChange}
+                error={errors.password}
+              />
+              <InputField
+                label="Confirm Password"
+                name="password2"
+                type="password"
+                icon={FaLock}
+                placeholder="••••••••"
+                value={formData.password2}
+                onChange={handleChange}
+                error={errors.password2}
+              />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                  <FaPhone className="text-gray-400" />
-                </div>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="98XXXXXXXX"
-                />
-              </div>
+            {/* Password Requirements */}
+            <div className="p-4 bg-gray-50 rounded-lg text-sm text-gray-600">
+              <p className="font-semibold mb-2">Password must contain:</p>
+              <ul className="space-y-1">
+                <li className="flex items-center space-x-2">
+                  <span className={formData.password.length >= 8 ? 'text-green-600' : 'text-gray-400'}>
+                    {formData.password.length >= 8 ? '✓' : '○'}
+                  </span>
+                  <span>At least 8 characters</span>
+                </li>
+              </ul>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                    <FaLock className="text-gray-400" />
-                  </div>
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Confirm Password *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                    <FaLock className="text-gray-400" />
-                  </div>
-                  <input
-                    type="password"
-                    name="password2"
-                    value={formData.password2}
-                    onChange={handleChange}
-                    className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium"
+              className="group w-full bg-gradient-primary text-white py-4 px-6 rounded-xl font-semibold hover:shadow-glow transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2"
             >
-              {loading ? 'Creating Account...' : 'Create Account'}
+              <span>{loading ? 'Creating Your Account...' : 'Create Account'}</span>
+              {!loading && <FaArrowRight className="group-hover:translate-x-1 transition-transform" />}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          {/* Login Link */}
+          <div className="mt-8 text-center">
             <p className="text-gray-600">
               Already have an account?{' '}
-              <Link to="/login" className="text-blue-600 hover:underline font-medium">
+              <Link to="/login" className="text-primary-600 hover:text-primary-700 font-semibold hover:underline">
                 Sign in here
               </Link>
             </p>
+          </div>
+
+          {/* Benefits */}
+          <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-100">
+            <p className="font-semibold text-gray-700 mb-3 flex items-center">
+              <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+              What you get with your account:
+            </p>
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
+              <li>✨ Instant loan applications</li>
+              <li>🤖 AI-powered approval</li>
+              <li>📧 Email notifications</li>
+              <li>📱 SMS alerts</li>
+              <li>📊 Real-time tracking</li>
+              <li>💬 24/7 chatbot support</li>
+            </ul>
           </div>
         </div>
       </div>

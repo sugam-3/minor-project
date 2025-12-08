@@ -131,13 +131,34 @@ SIMPLE_JWT = {
 
 # === CORS & CSRF ===
 # Prefer environment-driven CORS/CSRF settings (comma-separated lists)
-CORS_ALLOWED_ORIGINS = config(
-    "https://minor-project-1-c3qo.onrender.com",
-    'CORS_ALLOWED_ORIGINS',
-    default='',
-    cast=lambda s: [u.strip() for u in s.split(',') if u.strip()]
-)
-CORS_ALLOW_CREDENTIALS = config('CORS_ALLOW_CREDENTIALS', default=True, cast=bool)
+CORS_ALLOW_ALL_ORIGINS = True  # FOR DEVELOPMENT ONLY
+# Or use this for production:
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+#     "https://your-frontend-domain.com",
+# ]
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS',
@@ -153,3 +174,16 @@ AUTH_USER_MODEL = 'api.User'
 
 # === File upload limits ===
 MAX_UPLOAD_SIZE = config('MAX_UPLOAD_SIZE', default=5242880, cast=int)  # 5MB default
+
+# Email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'   # or SendGrid SMTP
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'your_email@example.com'
+EMAIL_HOST_PASSWORD = 'your_email_password'
+
+# Twilio (SMS)
+TWILIO_ACCOUNT_SID = 'your_twilio_sid'
+TWILIO_AUTH_TOKEN = 'your_twilio_auth_token'
+TWILIO_PHONE_NUMBER = '+1234567890'

@@ -12,6 +12,8 @@ import LoanApplication from './components/Customer/LoanApplication';
 import DocumentUpload from './components/Customer/DocumentUpload';
 import EMITracker from './components/Customer/EMITracker';
 import VehicleBrowser from './components/Customer/VehicleBrowser';
+import Profile from './components/Customer/Profile'; // Profile page
+import Settings from './components/Customer/Settings'; // Settings page
 
 // Sales Rep Pages
 import SalesRepDashboard from './components/SalesRep/Dashboard';
@@ -35,18 +37,34 @@ function App() {
   return (
     <Router>
       <Toaster position="top-right" />
-      
+
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
+
         {/* Customer Routes */}
         <Route
           path="/customer/dashboard"
           element={
             <ProtectedRoute allowedRoles={['customer']}>
               <CustomerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customer/profile"
+          element={
+            <ProtectedRoute allowedRoles={['customer']}>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customer/settings"
+          element={
+            <ProtectedRoute allowedRoles={['customer']}>
+              <Settings />
             </ProtectedRoute>
           }
         />
@@ -82,7 +100,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Sales Rep Routes */}
         <Route
           path="/sales/dashboard"
@@ -100,7 +118,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Finance Routes */}
         <Route
           path="/finance/dashboard"
@@ -118,7 +136,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Admin Routes */}
         <Route
           path="/admin/dashboard"
@@ -128,12 +146,12 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Default Redirect */}
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      
+
       {/* Chatbot Widget - Available on all pages when logged in */}
       {authService.isAuthenticated() && <ChatWidget />}
     </Router>

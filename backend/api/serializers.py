@@ -1,22 +1,51 @@
 from rest_framework import serializers
-from django.contrib.auth.password_validation import validate_password
 from .models import (
     User, Vehicle, LoanApplication, Document, 
     EMISchedule, Payment, Notification, ChatMessage
 )
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password = serializers.CharField(write_only=True, required=True, min_length=8)
     
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name', 
                   'user_type', 'phone', 'address', 'citizenship_number', 
                   'date_of_birth', 'profile_picture', 'created_at']
-        extra_kwargs = {'password': {'write_only': True}}
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'email': {'required': True},
+            'phone': {'required': True},
+            'first_name': {'required': True},
+            'last_name': {'required': True},
+        }
+    
+    def validate_email(self, value):
+        """Check if email already exists"""
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("This email is already registered.")
+        return value
+    
+    def validate_username(self, value):
+        """Check if username already exists"""
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
     
     def create(self, validated_data):
-        user = User.objects.create_user(**validated_data)
+        """Create user with hashed password"""
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
+            phone=validated_data['phone'],
+            user_type=validated_data.get('user_type', 'customer'),
+            address=validated_data.get('address', ''),
+            citizenship_number=validated_data.get('citizenship_number', ''),
+            date_of_birth=validated_data.get('date_of_birth', None),
+        )
         return user
 
 
