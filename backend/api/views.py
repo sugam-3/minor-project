@@ -11,8 +11,8 @@ from decimal import Decimal
 import math
 
 from .models import (
-    User, Vehicle, LoanApplication, Document, 
-    EMISchedule, Payment
+    User, Vehicle, LoanApplication, Document,
+    EMISchedule, Payment, Notification
 )
 from .serializers import (
     UserSerializer, VehicleSerializer, LoanApplicationSerializer,
@@ -20,8 +20,6 @@ from .serializers import (
     NotificationSerializer
 )
 from ai_engine.credit_scorer import CreditScorer
-
-# Updated import for notifications
 from .notifications import notify_user
 
 
@@ -47,7 +45,7 @@ def register(request):
 def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
-    
+
     user = authenticate(username=username, password=password)
     if user:
         refresh = RefreshToken.for_user(user)
@@ -83,27 +81,39 @@ class VehicleViewSet(viewsets.ModelViewSet):
     serializer_class = VehicleSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+
     search_fields = ['name', 'brand', 'model', 'vehicle_type']
-    ordering_fields = ['price', 'created_at']
-    
+
+    # Prevent crashes if `created_at` does not exist
+    try:
+        Vehicle._meta.get_field('created_at')
+        ordering_fields = ['price', 'created_at']
+    except Exception:
+        ordering_fields = ['price']
+
     def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'filter_by_type', 'filter_by_price']:
             return [AllowAny()]
         return [IsAuthenticated()]
-    
+
     @action(detail=False, methods=['get'])
     def filter_by_type(self, request):
         vehicle_type = request.query_params.get('type')
-        vehicles = self.queryset.filter(vehicle_type=vehicle_type)
-        serializer = self.get_serializer(vehicles, many=True)
+        qs = self.queryset
+
+        if vehicle_type:
+            qs = qs.filter(vehicle_type=vehicle_type)
+
+        serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
-    
+
     @action(detail=False, methods=['get'])
     def filter_by_price(self, request):
         min_price = request.query_params.get('min_price', 0)
         max_price = request.query_params.get('max_price', 999999999)
-        vehicles = self.queryset.filter(price__gte=min_price, price__lte=max_price)
-        serializer = self.get_serializer(vehicles, many=True)
+
+        qs = self.queryset.filter(price__gte=min_price, price__lte=max_price)
+        serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
 
@@ -112,7 +122,7 @@ class VehicleViewSet(viewsets.ModelViewSet):
 class LoanApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = LoanApplicationSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         user = self.request.user
         if user.user_type == 'customer':
@@ -120,38 +130,47 @@ class LoanApplicationViewSet(viewsets.ModelViewSet):
         elif user.user_type in ['sales_rep', 'finance_manager', 'admin']:
             return LoanApplication.objects.all()
         return LoanApplication.objects.none()
-    
+
     def perform_create(self, serializer):
-        loan = serializer.save(customer=self.request.user, status='submitted', submitted_at=timezone.now())
+        loan = serializer.save(
+            customer=self.request.user,
+            status='submitted',
+            submitted_at=timezone.now()
+        )
         self.calculate_emi(loan)
+
         notify_user(
             user=loan.customer,
             title='Loan Application Submitted',
             message=f'Your loan application {loan.application_number} has been submitted successfully.'
         )
-    
+
     def calculate_emi(self, loan):
         P = float(loan.loan_amount)
         r = float(loan.interest_rate) / (12 * 100)
         n = loan.tenure_months
-        
-        emi = P * r * math.pow(1 + r, n) / (math.pow(1 + r, n) - 1)
+
+        if r == 0:
+            emi = P / n
+        else:
+            emi = P * r * math.pow(1 + r, n) / (math.pow(1 + r, n) - 1)
+
         loan.monthly_emi = round(Decimal(emi), 2)
         loan.save()
         self.generate_emi_schedule(loan)
-    
+
     def generate_emi_schedule(self, loan):
         remaining_balance = float(loan.loan_amount)
         monthly_rate = float(loan.interest_rate) / (12 * 100)
         emi_amount = float(loan.monthly_emi)
-        
+
         for i in range(1, loan.tenure_months + 1):
             interest = remaining_balance * monthly_rate
             principal = emi_amount - interest
             remaining_balance -= principal
-            
+
             due_date = timezone.now().date() + timedelta(days=30 * i)
-            
+
             EMISchedule.objects.create(
                 application=loan,
                 emi_number=i,
@@ -161,79 +180,79 @@ class LoanApplicationViewSet(viewsets.ModelViewSet):
                 interest_amount=round(Decimal(interest), 2),
                 remaining_balance=max(round(Decimal(remaining_balance), 2), Decimal(0))
             )
-    
+
     @action(detail=True, methods=['post'])
     def verify_documents(self, request, pk=None):
         loan = self.get_object()
         if request.user.user_type != 'sales_rep':
-            return Response({'error': 'Only sales representatives can verify documents'}, status=status.HTTP_403_FORBIDDEN)
-        
+            return Response({'error': 'Only sales representatives can verify documents'}, status=403)
+
         loan.status = 'documents_verified'
         loan.verified_by = request.user
         loan.verified_at = timezone.now()
         loan.save()
-        
+
         notify_user(
             user=loan.customer,
             title='Documents Verified',
             message=f'Your documents for application {loan.application_number} have been verified.'
         )
-        
+
         return Response({'message': 'Documents verified successfully'})
-    
+
     @action(detail=True, methods=['post'])
     def ai_score(self, request, pk=None):
         loan = self.get_object()
         scorer = CreditScorer()
         score, risk_level, recommendation = scorer.score_application(loan)
-        
+
         loan.credit_score = score
         loan.fraud_risk_level = risk_level
         loan.ai_recommendation = recommendation
         loan.save()
-        
+
         return Response({
             'credit_score': score,
             'risk_level': risk_level,
             'recommendation': recommendation
         })
-    
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         loan = self.get_object()
         if request.user.user_type not in ['finance_manager', 'admin']:
-            return Response({'error': 'Only finance managers can approve loans'}, status=status.HTTP_403_FORBIDDEN)
-        
+            return Response({'error': 'Only finance managers can approve loans'}, status=403)
+
         loan.status = 'approved'
         loan.approved_by = request.user
         loan.approved_at = timezone.now()
         loan.save()
-        
+
         notify_user(
             user=loan.customer,
-            title='Loan Approved! 🎉',
-            message=f'Congratulations! Your loan application {loan.application_number} has been approved.'
+            title='Loan Approved!',
+            message=f'Your loan application {loan.application_number} has been approved.'
         )
-        
+
         return Response({'message': 'Loan approved successfully'})
-    
+
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         loan = self.get_object()
         if request.user.user_type not in ['finance_manager', 'admin']:
-            return Response({'error': 'Only finance managers can reject loans'}, status=status.HTTP_403_FORBIDDEN)
-        
+            return Response({'error': 'Only finance managers can reject loans'}, status=403)
+
         reason = request.data.get('reason', '')
         loan.status = 'rejected'
         loan.rejection_reason = reason
         loan.save()
-        
+
         notify_user(
             user=loan.customer,
             title='Loan Application Rejected',
             message=f'Your loan application {loan.application_number} has been rejected. Reason: {reason}'
         )
-        
+
         return Response({'message': 'Loan rejected'})
 
 
@@ -242,25 +261,25 @@ class LoanApplicationViewSet(viewsets.ModelViewSet):
 class DocumentViewSet(viewsets.ModelViewSet):
     serializer_class = DocumentSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         user = self.request.user
         if user.user_type == 'customer':
             return Document.objects.filter(application__customer=user)
         return Document.objects.all()
-    
+
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
         document = self.get_object()
         if request.user.user_type not in ['sales_rep', 'admin']:
-            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-        
+            return Response({'error': 'Permission denied'}, status=403)
+
         document.status = 'verified'
         document.verified_by = request.user
         document.verified_at = timezone.now()
         document.verification_notes = request.data.get('notes', '')
         document.save()
-        
+
         return Response({'message': 'Document verified'})
 
 
@@ -269,13 +288,13 @@ class DocumentViewSet(viewsets.ModelViewSet):
 class EMIScheduleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = EMIScheduleSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         user = self.request.user
         if user.user_type == 'customer':
             return EMISchedule.objects.filter(application__customer=user)
         return EMISchedule.objects.all()
-    
+
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
         today = timezone.now().date()
@@ -292,7 +311,7 @@ class EMIScheduleViewSet(viewsets.ReadOnlyModelViewSet):
 class PaymentViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         user = self.request.user
         if user.user_type == 'customer':
@@ -302,22 +321,20 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
 # ----------------- Notification ViewSet ----------------- #
 
-from .models import Notification
-
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
-    
+
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
         notification = self.get_object()
         notification.is_read = True
         notification.save()
         return Response({'message': 'Marked as read'})
-    
+
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
         self.get_queryset().update(is_read=True)
@@ -330,7 +347,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
     user = request.user
-    
+
     if user.user_type == 'customer':
         stats = {
             'total_applications': LoanApplication.objects.filter(customer=user).count(),
@@ -342,6 +359,7 @@ def dashboard_stats(request):
                 emi_schedule__application__customer=user
             ).count(),
         }
+
     elif user.user_type == 'admin':
         stats = {
             'total_applications': LoanApplication.objects.count(),
@@ -351,11 +369,12 @@ def dashboard_stats(request):
             ).count(),
             'total_customers': User.objects.filter(user_type='customer').count(),
         }
+
     else:
         stats = {
             'pending_tasks': LoanApplication.objects.filter(
                 Q(status='submitted') | Q(status='under_review')
             ).count()
         }
-    
+
     return Response(stats)

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FaCar, FaFileAlt, FaMoneyBillWave, FaBell, FaPlus, FaChartLine, FaClock, FaCheckCircle } from 'react-icons/fa';
-import toast from 'react-hot-toast';
 import authService from '../../services/auth';
 import loanService from '../../services/loans';
 import dashboardService from '../../services/dashboard';
 import Navbar from '../Shared/Navbar';
-import ChatWidget from '../Chatbot/ChatWidget'; // Chat integration
+import ChatWidget from '../Chatbot/ChatWidget';
+import VehicleList from '../Customer/VehicleList'; // Make sure folder name matches
 
 const CustomerDashboard = () => {
   const [stats, setStats] = useState({});
@@ -73,7 +73,7 @@ const CustomerDashboard = () => {
         <div className="bg-gradient-primary rounded-2xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full -ml-24 -mb-24"></div>
-          
+
           <div className="relative z-10">
             <div className="flex items-center space-x-2 mb-2">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -106,6 +106,7 @@ const CustomerDashboard = () => {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          {/* Total Applications */}
           <div className="stat-card group hover:shadow-xl transition-all">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -121,6 +122,7 @@ const CustomerDashboard = () => {
             </div>
           </div>
 
+          {/* Approved Loans */}
           <div className="stat-card group hover:shadow-xl transition-all">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-gradient-success rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -136,6 +138,7 @@ const CustomerDashboard = () => {
             </div>
           </div>
 
+          {/* Pending */}
           <div className="stat-card group hover:shadow-xl transition-all">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-gradient-warning rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -151,6 +154,7 @@ const CustomerDashboard = () => {
             </div>
           </div>
 
+          {/* EMI Paid */}
           <div className="stat-card group hover:shadow-xl transition-all">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -286,9 +290,18 @@ const CustomerDashboard = () => {
             </div>
           )}
         </div>
+
+        {/* Available Vehicles */}
+        <div className="glass rounded-2xl p-6 shadow-lg">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Available Vehicles
+          </h2>
+          <VehicleList />
+        </div>
+
       </div>
 
-      {/* Chat widget appears after login */}
+      {/* Chat widget */}
       <ChatWidget />
     </div>
   );

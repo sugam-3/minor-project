@@ -14,6 +14,8 @@ import EMITracker from './components/Customer/EMITracker';
 import VehicleBrowser from './components/Customer/VehicleBrowser';
 import Profile from './components/Customer/Profile'; // Profile page
 import Settings from './components/Customer/Settings'; // Settings page
+// import VehicleDashboard from "./components/Customer/VehicleDashboard";
+import VehicleList from "./components/Customer/VehicleList";   // <-- ADDED
 
 // Sales Rep Pages
 import SalesRepDashboard from './components/SalesRep/Dashboard';
